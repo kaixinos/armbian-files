@@ -17,19 +17,13 @@
 #
 # error_msg           : Output error message
 # check_release       : Check the system release
-# backup_source_list  : Backup the source list
 # change_source_list  : Change the source of the system
 # select_mirror_site  : Select the mirror site
 #
 #========================= Set default parameters ==========================
 #
 # Set the default source of the system
-armbian_source_file="/etc/apt/sources.list"
-armbian_source_backup_file="/etc/apt/sources.list.d/sources.list.bak"
-armbian_list_file="/etc/apt/sources.list.d/armbian.list"
-# Get custom firmware information
-#ophub_release_file="/etc/ophub-release"
-ophub_release_file="/etc/os-release"
+armbian_source_file=""
 
 # Set font color
 STEPS="[\033[95m STEPS \033[0m]"
@@ -48,22 +42,22 @@ error_msg() {
 
 # Check the system release
 check_release() {
-    if [[ -f "${ophub_release_file}" ]]; then
-        source "${ophub_release_file}"
-        #VERSION_CODEID="${VERSION_CODEID}"
-        VERSION_CODENAME="${VERSION_CODENAME}"
-        #[[ -z "${VERSION_CODEID}" ]] && error_msg "The system VERSION_CODEID is not detected!"
+    if [[ -f "/etc/os-release" ]]; then
+        source "/etc/os-release"
         [[ -z "${VERSION_CODENAME}" ]] && error_msg "The system VERSION_CODENAME is not detected!"
+
+        case "${VERSION_CODENAME}" in
+        trixie)
+            armbian_source_file="/etc/apt/sources.list.d/debian.sources"
+            ;;
+        noble | resolute)
+            armbian_source_file="/etc/apt/sources.list.d/ubuntu.sources"
+            ;;
+        esac
+        [[ -z "${armbian_source_file}" ]] && error_msg "The system release is not detected: [ ${VERSION_CODENAME} ]"
     else
         error_msg "The system release file is not detected!"
     fi
-}
-
-# Backup the source list
-backup_source_list() {
-    [[ -f "${armbian_source_file}" && ! -f "${armbian_source_backup_file}" ]] && {
-        cp -f "${armbian_source_file}" "${armbian_source_backup_file}"
-    }
 }
 
 # Change the source of the system
@@ -72,74 +66,33 @@ change_source_list() {
     echo -e "${INFO} The system release is: [ ${VERSION_CODENAME} ]"
 
     case "${VERSION_CODENAME}" in
-    buster)
-        cat >${armbian_source_file} <<EOF
-        deb http://${MIRROR_URL}/debian ${VERSION_CODENAME} main contrib non-free
-        #deb-src http://${MIRROR_URL}/debian ${VERSION_CODENAME} main contrib non-free
+    trixie)
+        cat >"${armbian_source_file}" <<EOF
+        Types: deb
+        URIs: ${DEBIAN_MIRROR}
+        Suites: trixie trixie-updates trixie-backports
+        Components: main contrib non-free non-free-firmware
+        Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
 
-        deb http://${MIRROR_URL}/debian ${VERSION_CODENAME}-updates main contrib non-free
-        #deb-src http://${MIRROR_URL}/debian ${VERSION_CODENAME}-updates main contrib non-free
+EOF
+        cat >>"${armbian_source_file}" <<EOF
+        Types: deb
+        URIs: ${DEBIAN_SECURITY}/
+        Suites: trixie-security
+        Components: main contrib non-free non-free-firmware
+        Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
 
-        deb http://${MIRROR_URL}/debian-security ${VERSION_CODENAME}/updates main contrib non-free
-        #deb-src http://${MIRROR_URL}/debian-security ${VERSION_CODENAME}/updates main contrib non-free
 EOF
         ;;
 
-    bullseye)
-        cat >${armbian_source_file} <<EOF
-        deb http://${MIRROR_URL}/debian ${VERSION_CODENAME} main contrib non-free
-        #deb-src http://${MIRROR_URL}/debian ${VERSION_CODENAME} main contrib non-free
+    noble | resolute)
+        cat >"${armbian_source_file}" <<EOF
+        Types: deb
+        URIs: ${UBUNTU_MIRROR}/
+        Suites: ${VERSION_CODENAME} ${VERSION_CODENAME}-security ${VERSION_CODENAME}-updates ${VERSION_CODENAME}-backports
+        Components: main restricted universe multiverse
+        Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
 
-        deb http://${MIRROR_URL}/debian ${VERSION_CODENAME}-updates main contrib non-free
-        #deb-src http://${MIRROR_URL}/debian ${VERSION_CODENAME}-updates main contrib non-free
-
-        deb http://${MIRROR_URL}/debian ${VERSION_CODENAME}-backports main contrib non-free
-        #deb-src http://${MIRROR_URL}/debian ${VERSION_CODENAME}-backports main contrib non-free
-
-        deb http://${MIRROR_URL}/debian-security ${VERSION_CODENAME}-security main contrib non-free
-        #deb-src http://${MIRROR_URL}/debian-security ${VERSION_CODENAME}-security main contrib non-free
-EOF
-        ;;
-
-    bookworm | trixie)
-        # non-free firmware in bookworm and later has moved from the non-free archive component to a new non-free-firmware component (alongside main/contrib/non-free).
-        # This was implemented on 2023-01-27, see also https://lists.debian.org/debian-boot/2023/01/msg00235.html
-        cat >${armbian_source_file} <<EOF
-        deb http://${MIRROR_URL}/debian ${VERSION_CODENAME} main contrib non-free non-free-firmware
-        #deb-src http://${MIRROR_URL}/debian ${VERSION_CODENAME} main contrib non-free non-free-firmware
-
-        deb http://${MIRROR_URL}/debian ${VERSION_CODENAME}-updates main contrib non-free non-free-firmware
-        #deb-src http://${MIRROR_URL}/debian ${VERSION_CODENAME}-updates main contrib non-free non-free-firmware
-
-        deb http://${MIRROR_URL}/debian ${VERSION_CODENAME}-backports main contrib non-free non-free-firmware
-        #deb-src http://${MIRROR_URL}/debian ${VERSION_CODENAME}-backports main contrib non-free non-free-firmware
-
-        deb http://${MIRROR_URL}/debian-security ${VERSION_CODENAME}-security main contrib non-free non-free-firmware
-        #deb-src http://${MIRROR_URL}/debian-security ${VERSION_CODENAME}-security main contrib non-free non-free-firmware
-EOF
-        ;;
-
-    focal | jammy | noble | oracular)
-        cat >${armbian_source_file} <<EOF
-        deb http://${MIRROR_URL}/ubuntu-ports ${VERSION_CODENAME} main restricted universe multiverse
-        #deb-src http://${MIRROR_URL}/ubuntu-ports ${VERSION_CODENAME} main restricted universe multiverse
-
-        deb http://${MIRROR_URL}/ubuntu-ports ${VERSION_CODENAME}-security main restricted universe multiverse
-        #deb-src http://${MIRROR_URL}/ubuntu-ports ${VERSION_CODENAME}-security main restricted universe multiverse
-
-        deb http://${MIRROR_URL}/ubuntu-ports ${VERSION_CODENAME}-updates main restricted universe multiverse
-        #deb-src http://${MIRROR_URL}/ubuntu-ports ${VERSION_CODENAME}-updates main restricted universe multiverse
-
-        deb http://${MIRROR_URL}/ubuntu-ports ${VERSION_CODENAME}-backports main restricted universe multiverse
-        #deb-src http://${MIRROR_URL}/ubuntu-ports ${VERSION_CODENAME}-backports main restricted universe multiverse
-EOF
-        ;;
-
-    sid | unstable)
-        # sid is permanent unstable development and has no such thing as updates or security
-        cat >${armbian_source_file} <<EOF
-        deb http://${MIRROR_URL}/debian ${VERSION_CODENAME} main contrib non-free non-free-firmware
-        #deb-src http://${MIRROR_URL}/debian ${VERSION_CODENAME} main contrib non-free non-free-firmware
 EOF
         ;;
 
@@ -150,7 +103,7 @@ EOF
     esac
 
     # Remove the space at the beginning of each line
-    sed -i 's|^[ t]*||g' ${armbian_source_file}
+    sed -i 's|^[ \t]*||' "${armbian_source_file}"
     echo -e "${SUCCESS} Change the source of the system successfully."
 }
 
@@ -158,39 +111,62 @@ EOF
 select_mirror_site() {
     source_id="${1}"
     echo -e "${INFO} Your selected source ID is: [ ${source_id} ]"
+    DEBIAN_MIRROR=""
+    DEBIAN_SECURITY=""
+    UBUNTU_MIRROR=""
 
     case "${source_id}" in
     0)
         # Restore the default source
-        if [[ -f "${armbian_source_backup_file}" ]]; then
-            cp -f "${armbian_source_backup_file}" "${armbian_source_file}"
-            echo -e "${SUCCESS} Restore the default source successfully." && exit 0
-        else
-            error_msg "The default source file does not exist."
-        fi
+        MIRROR_URL="default"
+        case "${VERSION_CODENAME}" in
+        trixie)
+            DEBIAN_MIRROR="http://deb.debian.org/debian"
+            DEBIAN_SECURITY="http://security.debian.org"
+            ;;
+        noble | resolute)
+            UBUNTU_MIRROR="http://ports.ubuntu.com/ubuntu-ports"
+            ;;
+        esac
+        change_source_list
+        exit 0
         ;;
     1) MIRROR_URL="mirrors.tuna.tsinghua.edu.cn" ;;
     2) MIRROR_URL="mirrors.bfsu.edu.cn" ;;
     3) MIRROR_URL="mirrors.aliyun.com" ;;
-    4) MIRROR_URL="mirrors.xtom.hk" ;;
-    5) MIRROR_URL="opensource.nchc.org.tw" ;;
-    6) MIRROR_URL="mirrors.ocf.berkeley.edu" ;;
-    7) MIRROR_URL="mirrors.xtom.com" ;;
-    8) MIRROR_URL="mirrors.mit.edu" ;;
-    9) MIRROR_URL="mirror.csclub.uwaterloo.ca" ;;
-    10) MIRROR_URL="muug.ca/mirror" ;;
-    11) MIRROR_URL="mirror.kumi.systems" ;;
-    12) MIRROR_URL="mirrors.xtom.nl" ;;
-    13) MIRROR_URL="mirrors.xtom.de" ;;
-    14) MIRROR_URL="mirror.yandex.ru" ;;
-    15) MIRROR_URL="in.mirror.coganng.com" ;;
-    16) MIRROR_URL="mirrors.xtom.ee" ;;
-    17) MIRROR_URL="mirrors.xtom.au" ;;
-    18) MIRROR_URL="mirror.yuki.net.uk" ;;
-    19) MIRROR_URL="mirror.sg.gs" ;;
-    20) MIRROR_URL="mirrors.xtom.jp" ;;
+    4) MIRROR_URL="mirrors.huaweicloud.com" ;;
+    5) MIRROR_URL="mirror.twds.com.tw" ;;
+    6) MIRROR_URL="mirror.yandex.ru" ;;
+    7) MIRROR_URL="ftp.kaist.ac.kr" ;;
+    8) MIRROR_URL="ftp.lanet.kr" ;;
+    9) MIRROR_URL="mirror.sg.gs" ;;
+    10) MIRROR_URL="mirror.aarnet.edu.au" ;;
+    11) MIRROR_URL="mirrors.ocf.berkeley.edu" ;;
+    12) MIRROR_URL="files.openstack.org/mirror" ;;
+    13)
+        MIRROR_URL="steadfastnet.com,leaseweb.net"
+        DEBIAN_MIRROR="https://mirror.steadfastnet.com/debian"
+        DEBIAN_SECURITY="https://mirror.steadfastnet.com/debian-security"
+        UBUNTU_MIRROR="https://mirror.us.leaseweb.net/ubuntu-ports"
+        ;;
+    14) MIRROR_URL="mirror.csclub.uwaterloo.ca" ;;
+    15) MIRROR_URL="mirror.servercodes.com" ;;
+    16) MIRROR_URL="ftp.openbsd.dk/mirrors" ;;
+    17) MIRROR_URL="mirrors.dotsrc.org" ;;
+    18) MIRROR_URL="mirror.dogado.de" ;;
+    19)
+        MIRROR_URL="ftp.de.debian.org,ftp.fau.de"
+        DEBIAN_MIRROR="http://ftp.de.debian.org/debian"
+        DEBIAN_SECURITY="http://ftp.de.debian.org/debian-security"
+        UBUNTU_MIRROR="https://ftp.fau.de/ubuntu-ports"
+        ;;
+    20) MIRROR_URL="mirror.yuki.net.uk" ;;
     *) error_msg "The source ID is not detected." ;;
     esac
+
+    DEBIAN_MIRROR="${DEBIAN_MIRROR:-http://${MIRROR_URL}/debian}"
+    DEBIAN_SECURITY="${DEBIAN_SECURITY:-http://${MIRROR_URL}/debian-security}"
+    UBUNTU_MIRROR="${UBUNTU_MIRROR:-http://${MIRROR_URL}/ubuntu-ports}"
 
     # Change the source list
     change_source_list
@@ -199,43 +175,41 @@ select_mirror_site() {
 echo -e "${STEPS} Welcome to the Armbian source change script."
 # Check the system release
 check_release
-# Backup the source list
-backup_source_list
 
 # Prompt the user to input the source ID
 echo -e "${INFO} Please select a [\033[92m ${VERSION_CODENAME} \033[0m] mirror site."
 cat <<EOF
-  ┌──────┬───────────────────┬────────────────────────────────┐
-  │  ID  │  Country/Region   │  Mirror Site                   │
-  ├──────┼───────────────────┼────────────────────────────────┤
-  │   0  │  -                │  Restore default source        │
-  │   1  │  China            │  mirrors.tuna.tsinghua.edu.cn  │
-  │   2  │  China            │  mirrors.bfsu.edu.cn           │
-  │   3  │  China            │  mirrors.aliyun.com            │
-  │   4  │  Hongkong, China  │  mirrors.xtom.hk               │
-  │   5  │  Taiwan, China    │  opensource.nchc.org.tw        │
-  ├──────┼───────────────────┼────────────────────────────────┤
-  │   6  │  United States    │  mirrors.ocf.berkeley.edu      │
-  │   7  │  United States    │  mirrors.xtom.com              │
-  │   8  │  United States    │  mirrors.mit.edu               │
-  │   9  │  Canada           │  mirror.csclub.uwaterloo.ca    │
-  │  10  │  Canada           │  muug.ca/mirror                │
-  ├──────┼───────────────────┼────────────────────────────────┤
-  │  11  │  Finland          │  mirror.kumi.systems           │
-  │  12  │  Netherlands      │  mirrors.xtom.nl               │
-  │  13  │  Germany          │  mirrors.xtom.de               │
-  │  14  │  Russia           │  mirror.yandex.ru              │
-  │  15  │  India            │  in.mirror.coganng.com         │
-  ├──────┼───────────────────┼────────────────────────────────┤
-  │  16  │  Estonia          │  mirrors.xtom.ee               │
-  │  17  │  Australia        │  mirrors.xtom.au               │
-  │  18  │  South Korea      │  mirror.yuki.net.uk            │
-  │  19  │  Singapore        │  mirror.sg.gs                  │
-  │  20  │  Japan            │  mirrors.xtom.jp               │
-  └──────┴───────────────────┴────────────────────────────────┘
+  ┌──────┬───────────────────┬─────────────────────────────────┐
+  │  ID  │  Country/Region   │  Mirror Site                    │
+  ├──────┼───────────────────┼─────────────────────────────────┤
+  │   0  │  -                │  Restore default source         │
+  │   1  │  China            │  mirrors.tuna.tsinghua.edu.cn   │
+  │   2  │  China            │  mirrors.bfsu.edu.cn            │
+  │   3  │  China            │  mirrors.aliyun.com             │
+  │   4  │  China            │  mirrors.huaweicloud.com        │
+  │   5  │  Taiwan, China    │  mirror.twds.com.tw             │
+  ├──────┼───────────────────┼─────────────────────────────────┤
+  │   6  │  Russia           │  mirror.yandex.ru               │
+  │   7  │  South Korea      │  ftp.kaist.ac.kr                │
+  │   8  │  South Korea      │  ftp.lanet.kr                   │
+  │   9  │  Singapore        │  mirror.sg.gs                   │
+  │  10  │  Australia        │  mirror.aarnet.edu.au           │
+  ├──────┼───────────────────┼─────────────────────────────────┤
+  │  11  │  United States    │  mirrors.ocf.berkeley.edu       │
+  │  12  │  United States    │  files.openstack.org/mirror     │
+  │  13  │  United States    │  steadfastnet.com,leaseweb.net  │
+  │  14  │  Canada           │  mirror.csclub.uwaterloo.ca     │
+  │  15  │  Canada           │  mirror.servercodes.com         │
+  ├──────┼───────────────────┼─────────────────────────────────┤
+  │  16  │  Denmark          │  ftp.openbsd.dk/mirrors         │
+  │  17  │  Denmark          │  mirrors.dotsrc.org             │
+  │  18  │  Germany          │  mirror.dogado.de               │
+  │  19  │  Germany          │  ftp.de.debian.org,ftp.fau.de   │
+  │  20  │  United Kingdom   │  mirror.yuki.net.uk             │
+  └──────┴───────────────────┴─────────────────────────────────┘
 EOF
 echo -ne "${OPTIONS} Please Input ID: "
-read mwid
+read -r mwid
 
 case "${mwid}" in
     [0-9]*) select_mirror_site "${mwid}" ;;
